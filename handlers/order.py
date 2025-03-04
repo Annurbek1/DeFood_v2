@@ -374,6 +374,38 @@ async def back_from_delivery_message(message: types.Message, state: FSMContext):
     await state.set_state(OrderState.waiting_restaurant_message)
     await message.answer("Restoran uchun xabar qoldiring yoki o'tkazib yuboring:", reply_markup=keyboard)
 
+@router.message(lambda message: message.text == "⬅️ Orqaga", OrderState.adding_new_address_location)
+async def back_from_new_address_location(message: types.Message, state: FSMContext):
+    """Return to address selection from new address location request"""
+    try:
+        # Get existing addresses
+        addresses, error = await get_user_addresses(message.from_user.id)
+        
+        if error:
+            logging.error(f"Error getting addresses: {error}")
+            await message.answer("Manzillarni olishda xatolik yuz berdi")
+            return
+
+        # Show address selection or request phone if no addresses
+        if addresses:
+            await show_address_selection(message, addresses, state)
+            await state.set_state(OrderState.waiting_for_address)
+        else:
+            # If user has no addresses, go back to phone input
+            keyboard = ReplyKeyboardMarkup(
+                keyboard=[[KeyboardButton(text="📱 Telefon raqamni yuborish", request_contact=True)]],
+                resize_keyboard=True
+            )
+            await state.set_state(OrderState.waiting_for_phone)
+            await message.answer(
+                "Buyurtma berish uchun telefon raqamingizni yuboring:", 
+                reply_markup=keyboard
+            )
+            
+    except Exception as e:
+        logging.error(f"Error handling back from new address location: {e}")
+        await message.answer("Xatolik yuz berdi")
+
 @router.message(OrderState.handle_new_address_location, F.location)
 async def handle_new_address_location(message: types.Message, state: FSMContext):
     """Handle location for new address"""
