@@ -19,6 +19,11 @@ class Config:
         print(f"Configuration error: {e}")
         sys.exit(1)
 
+    CITY_CENTER_LATITUDE = 38.2758164
+    CITY_CENTER_LONGITUDE = 67.894829
+
+    MAX_DISTANCE_KM = 6
+
     @classmethod
     def validate(cls):
         if not cls.BOT_TOKEN:

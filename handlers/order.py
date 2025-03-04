@@ -4,6 +4,8 @@ from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMar
 from states.states import OrderState
 from functions.order_functions import *
 import logging
+from utils.distance import check_delivery_distance
+from config import Config
 
 router = Router()
 
@@ -67,7 +69,7 @@ async def handle_location(message: types.Message, state: FSMContext):
         city_center = (CITY_CENTER_LATITUDE, CITY_CENTER_LONGITUDE)
         distance = geodesic(city_center, user_location).km
 
-        if distance > MAX_DISTANCE_KM:
+        if distance > Config.MAX_DISTANCE_KM:
             await message.answer(
                 "Kechirasiz, bu manzil yetkazib berish doirasidan tashqarida. "
                 "Iltimos boshqa manzil tanlang."
@@ -371,3 +373,45 @@ async def back_from_delivery_message(message: types.Message, state: FSMContext):
     ], resize_keyboard=True)
     await state.set_state(OrderState.waiting_restaurant_message)
     await message.answer("Restoran uchun xabar qoldiring yoki o'tkazib yuboring:", reply_markup=keyboard)
+
+@router.message(OrderState.handle_new_address_location, F.location)
+async def handle_new_address_location(message: types.Message, state: FSMContext):
+    """Handle location for new address"""
+    try:
+        # Check delivery distance
+        is_deliverable, distance = check_delivery_distance(
+            message.location.latitude,
+            message.location.longitude
+        )
+        
+        if not is_deliverable:
+            await message.answer(
+                f"❌ Kechirasiz, bu manzil yetkazib berish doirasidan tashqarida.\n"
+                f"Maksimal masofa: {Config.MAX_DISTANCE_KM} km\n"
+                f"Sizning manzilingizgacha: {distance:.1f} km\n\n"
+                f"Iltimos, boshqa manzil tanlang."
+            )
+            return
+            
+        # Save location data in state
+        await state.update_data(
+            new_address_lat=message.location.latitude,
+            new_address_lon=message.location.longitude
+        )
+        
+        # Ask for address name
+        keyboard = ReplyKeyboardMarkup(
+            keyboard=[[KeyboardButton(text="⬅️ Orqaga")]],
+            resize_keyboard=True
+        )
+        
+        await state.set_state(OrderState.handle_new_address_name)
+        await message.answer(
+            "Iltimos, bu manzil uchun nom bering:\n"
+            "Masalan: Uy, Ish, Do'kon va h.k.",
+            reply_markup=keyboard
+        )
+        
+    except Exception as e:
+        logging.error(f"Error saving new address location: {e}")
+        await message.answer("Xatolik yuz berdi")
